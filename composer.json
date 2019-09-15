@@ -1,0 +1,22 @@
+{
+    "name": "tolkam/pagination",
+    "description": "Extendable pagination",
+    "type": "library",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "Tolkam\\Pagination\\": "src"
+        }
+    },
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "doctrine/dbal": "^2.9"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.0-dev"
+        }
+    }
+}
