@@ -75,7 +75,7 @@ class PaginationResult implements PaginationResultInterface
      */
     public function isFirst(): bool
     {
-        return $this->getCurrentCursor() && !$this->getPreviousCursor();
+        return ($this->resultsCount() || $this->getCurrentCursor()) && !$this->getPreviousCursor();
     }
     
     /**
