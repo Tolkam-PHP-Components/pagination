@@ -38,7 +38,7 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
     /**
      * @var array
      */
-    private array $fetchMode = [];
+    protected array $fetchMode = [];
     
     /**
      * @param QueryBuilder $queryBuilder
