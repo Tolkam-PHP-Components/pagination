@@ -18,39 +18,45 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     protected const CURSOR_GLUE = '|';
     
     /**
-     * @var bool
-     */
-    private static bool $encodeCursors = false;
-    
-    /**
      * @var QueryBuilder
      */
     protected QueryBuilder $queryBuilder;
     
     /**
-     * @var string
+     * @var array
      */
-    protected ?string $currentCursor = null;
+    protected array $fetchMode = [];
+    
+    /**
+     * @var array
+     */
+    protected array $items = [];
     
     /**
      * @var string|null
      */
-    protected ?string $nextCursor = null;
+    protected ?string $after = null;
     
     /**
      * @var string|null
      */
-    protected ?string $previousCursor = null;
+    protected ?string $before = null;
+    
+    /**
+     * Whether to inverse items order
+     * @var bool
+     */
+    protected bool $reverseResults = false;
     
     /**
      * @var array|null
      */
-    protected ?array $primaryKey = null;
+    protected ?array $primarySort = null;
     
     /**
      * @var array|null
      */
-    protected ?array $backupKey = null;
+    protected ?array $backupSort = null;
     
     /**
      * @var callable|null
@@ -63,53 +69,121 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     protected int $maxResults = self::DEFAULT_PER_PAGE;
     
     /**
-     * @var array
+     * @var bool
      */
-    protected array $items = [];
-    
-    /**
-     * @var array
-     */
-    protected array $fetchMode = [];
+    protected bool $encodeCursors = true;
     
     /**
      * @param QueryBuilder $queryBuilder
-     * @param string       $currentCursor
      */
-    public function __construct(QueryBuilder $queryBuilder, ?string $currentCursor)
+    public function __construct(QueryBuilder $queryBuilder)
     {
         $this->queryBuilder = $queryBuilder;
-        $this->currentCursor = $currentCursor;
     }
     
     /**
-     * Sets the primaryKey
+     * Sets the primary sort
      *
      * @param string $name
      * @param string $order
      *
      * @return self
      */
-    public function setPrimaryKey(string $name, string $order = self::ORDER_ASC): self
+    public function setPrimarySort(string $name, string $order = self::ORDER_ASC): self
     {
+        if (empty($name)) {
+            throw new InvalidArgumentException('Primary sort column name can not be empty');
+        }
+        
         $this->validateOrder($order);
-        $this->primaryKey = [$name, $order];
+        $this->primarySort = [$name, $order];
         
         return $this;
     }
     
     /**
-     * Sets the backupKey
+     * Gets primary sort key
+     *
+     * @return string
+     */
+    public function getPrimaryKey(): string
+    {
+        if (!$this->primarySort) {
+            throw new RuntimeException('Primary sort must be set first');
+        }
+        
+        return $this->primarySort[0];
+    }
+    
+    /**
+     * Gets primary sort order
+     *
+     * @return string
+     */
+    public function getPrimaryOrder(): string
+    {
+        return $this->primarySort[1];
+    }
+    
+    /**
+     * Sets the backup sort
      *
      * @param string $name
      * @param string $order
      *
      * @return self
      */
-    public function setBackupKey(string $name, string $order = self::ORDER_ASC): self
+    public function setBackupSort(string $name, string $order = self::ORDER_ASC): self
     {
         $this->validateOrder($order);
-        $this->backupKey = [$name, $order];
+        $this->backupSort = [$name, $order];
+        
+        return $this;
+    }
+    
+    /**
+     * Gets backup sort key
+     *
+     * @return string|null
+     */
+    public function getBackupKey(): ?string
+    {
+        return $this->backupSort[0] ?? null;
+    }
+    
+    /**
+     * Gets backup sort order
+     *
+     * @return string|null
+     */
+    public function getBackupOrder(): ?string
+    {
+        return $this->backupSort[1] ?? null;
+    }
+    
+    /**
+     * Reverses results order
+     *
+     * @return self
+     */
+    public function reverseResults(): self
+    {
+        $this->reverseResults = true;
+        
+        return $this;
+    }
+    
+    /**
+     * Whether to encode cursors for pagination result
+     * (decoded ones are used for debugging)
+     *
+     * @param bool $value
+     *
+     * @return self
+     */
+    public function encodeCursors(bool $value): self
+    {
+        $this->encodeCursors = $value;
         
         return $this;
     }
@@ -131,13 +205,13 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     /**
      * Sets the next cursor
      *
-     * @param string|null $nextCursor
+     * @param string|null $after
      *
      * @return self
      */
-    public function setNextCursor(?string $nextCursor): self
+    public function setAfter(?string $after): self
     {
-        $this->nextCursor = $nextCursor;
+        $this->after = $after;
         
         return $this;
     }
@@ -145,13 +219,13 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     /**
      * Sets the previous cursor
      *
-     * @param string|null $previousCursor
+     * @param string|null $before
      *
      * @return self
      */
-    public function setPreviousCursor(?string $previousCursor): self
+    public function setBefore(?string $before): self
     {
-        $this->previousCursor = $previousCursor;
+        $this->before = $before;
         
         return $this;
     }
@@ -175,15 +249,17 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      */
     public function paginate(): PaginationResultInterface
     {
-        $previousCursor = $nextCursor = null;
-        $isPrev = isset($this->previousCursor);
+        $previousCursor = $currentCursor = $nextCursor = null;
+        $isBackwards = isset($this->before);
+        $isDescending = $this->primarySort[1] === self::ORDER_DESC;
+        $reverseResults = $this->reverseResults;
         
-        // extend query
         $query = $this->extendQuery(
             $this->queryBuilder,
-            $this->previousCursor ?? $this->nextCursor,
-            $isPrev ? $this->maxResults : $this->maxResults + 1,
-            $isPrev
+            $this->before ?? $this->after,
+            $this->maxResults,
+            $isBackwards,
+            $isDescending
         );
         
         $statement = $query->execute();
@@ -193,28 +269,35 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         
         $count = $statement->rowCount();
         $this->items = $statement->fetchAll();
-        if ($isPrev) {
+        if ($isBackwards && !$reverseResults || !$isBackwards && $reverseResults) {
             $this->items = array_reverse($this->items);
         }
         
-        // previous cursor
-        if (!empty($this->items)) {
-            $firstItem = $this->items[0];
-            if ($this->hasPreviousItem($this->queryBuilder, $firstItem)) {
-                $previousCursor = $this->buildCursor($firstItem);
+        // new cursors
+        if (count($this->items)) {
+            $query = $this->queryBuilder;
+            $firstInSet = $this->items[0];
+            $lastInSet = $this->items[$count - 1];
+            
+            // prev
+            $currentItem = $reverseResults ? $lastInSet : $firstInSet;
+            if ($this->hasPage($query, $currentItem, !$isDescending)) {
+                $previousCursor = $this->buildCursor($currentItem);
+            }
+            
+            // next
+            $currentItem = $reverseResults ? $firstInSet : $lastInSet;
+            if ($this->hasPage($query, $currentItem, $isDescending)) {
+                $nextCursor = $this->buildCursor($currentItem);
             }
         }
         
-        // fix max results
-        if (!$isPrev && $count > $this->maxResults) {
-            array_pop($this->items); // remove last item used for next check
-            $count = $this->maxResults;
-        }
-        
-        // next cursor
-        $nextCursor = $this->buildCursor($this->items[$count - 1]);
-        
-        return new PaginationResult($count, $previousCursor, null, $nextCursor);
+        return new PaginationResult(
+            $count,
+            $previousCursor,
+            $currentCursor,
+            $nextCursor
+        );
     }
     
     /**
@@ -249,44 +332,57 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      * @param QueryBuilder $query
      * @param string|null  $cursor
      * @param int          $maxResults
-     * @param bool         $isPrev
+     * @param bool         $isBackwards
+     * @param bool         $isDesc
      *
      * @return QueryBuilder
      */
-    private function extendQuery(QueryBuilder $query, ?string $cursor, int $maxResults, bool $isPrev)
-    {
-        if (empty($this->primaryKey)) {
-            throw new RuntimeException('Primary sorting key is required');
+    private function extendQuery(
+        QueryBuilder $query,
+        ?string $cursor,
+        int $maxResults,
+        bool $isBackwards,
+        bool $isDesc = false
+    ) {
+        $primaryKey = $this->getPrimaryKey();
+        $primaryOrder = $this->getPrimaryOrder();
+        $backupKey = $this->getBackupKey();
+        $backupOrder = $this->getBackupOrder();
+        
+        if ($isBackwards) {
+            $primaryOrder = $this->inverseOrder($primaryOrder);
+            $backupOrder = $this->inverseOrder($backupOrder);
         }
         
-        [$primaryKey, $primaryOrder] = $this->primaryKey;
-        [$backupKey, $backupOrder] = $this->backupKey ?? [null, null];
-        
-        if ($isPrev) {
-            $primaryOrder = $primaryOrder === self::ORDER_ASC ? self::ORDER_DESC : $primaryOrder;
-            $backupOrder = $backupOrder === self::ORDER_ASC ? self::ORDER_DESC : $backupOrder;
+        if ($cursor) {
+            $comp = $isBackwards ? '<' : '>';
+            if ($isDesc) {
+                $comp = $comp === '<' ? '>' : '<';
+            }
+            
+            [$primaryValue, $backupValue] = $this->parseCursor($cursor);
+            
+            $sql = "`$primaryKey` = :primaryValue";
+            if ($backupKey) {
+                $sql .= " AND `$backupKey` $comp :backupValue";
+            }
+            
+            $query
+                ->where($sql)
+                ->orWhere("`$primaryKey` $comp :primaryValue");
+            
+            $query->setParameters([
+                ':primaryValue' => $primaryValue,
+                ':backupValue' => $backupValue,
+            ]);
         }
         
-        $query->addOrderBy($primaryKey, $primaryOrder);
-        if ($this->backupKey) {
+        $query->orderBy($primaryKey, $primaryOrder);
+        if ($this->backupSort) {
             $query->addOrderBy($backupKey, $backupOrder);
         }
         
         $query->setMaxResults($maxResults);
-        
-        if ($cursor) {
-            $comp = $isPrev ? '<=' : '>';
-            [$primaryValue, $backupValue] = $this->parseCursor($cursor);
-            
-            $query
-                ->where("`$primaryKey` $comp :primaryValue")
-                ->setParameter(':primaryValue', $primaryValue);
-            
-            if ($backupKey) {
-                $query->andWhere("`$backupKey` != :backupValue")
-                    ->setParameter(':backupValue', $backupValue);
-            }
-        }
         
         return $query;
     }
@@ -294,15 +390,27 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     /**
      * @param QueryBuilder $query
      * @param array        $currentItem
+     * @param bool         $isBackwards
      *
      * @return bool
      */
-    private function hasPreviousItem(QueryBuilder $query, array $currentItem): bool
-    {
-        [$primaryKey] = $this->primaryKey;
-        [$backupKey] = $this->backupKey ?? [null];
+    private function hasPage(
+        QueryBuilder $query,
+        array $currentItem,
+        bool $isBackwards
+    ): bool {
         
-        $query = (clone $query);
+        $query = clone $query;
+        $primaryKey = $this->getPrimaryKey();
+        $primaryOrder = $this->getPrimaryOrder();
+        $backupKey = $this->getBackupKey();
+        $backupOrder = $this->getBackupOrder();
+        
+        if ($isBackwards) {
+            $primaryOrder = $this->inverseOrder($primaryOrder);
+            $backupOrder = $this->inverseOrder($backupOrder);
+        }
+        
         $primaryValue = $currentItem[$primaryKey];
         $backupValue = $currentItem[$backupKey] ?? null;
         
@@ -311,17 +419,39 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
             $processor($primaryValue, $backupValue);
         }
         
-        $query
-            ->where("`$primaryKey` < :primaryValue")
-            ->setParameter(':primaryValue', $primaryValue);
-        
+        $comp = $isBackwards ? '<' : '>';
+        $sql = "`$primaryKey` = :primaryValue";
         if ($backupKey) {
-            $query
-                ->andWhere("`$backupKey` != :backupValue")
-                ->setParameter(':backupValue', $backupValue);
+            $sql .= " AND `$backupKey` $comp :backupValue";
         }
         
-        return $query->setMaxResults(1)->execute()->rowCount() > 0;
+        $query
+            ->where($sql)
+            ->orWhere("`$primaryKey` $comp :primaryValue");
+        
+        if ($isBackwards) {
+            $query->orderBy($primaryKey, $primaryOrder);
+            if ($backupKey) {
+                $query->addOrderBy($backupKey, $backupOrder);
+            }
+        }
+        
+        $query->setParameters([
+            ':primaryValue' => $primaryValue,
+            ':backupValue' => $backupValue,
+        ]);
+        
+        return $query->setMaxResults(1)->execute()->rowCount() !== 0;
+    }
+    
+    /**
+     * @param string $order
+     *
+     * @return string
+     */
+    private function inverseOrder(string $order): string
+    {
+        return $order === self::ORDER_ASC ? self::ORDER_DESC : self::ORDER_ASC;
     }
     
     /**
@@ -331,8 +461,8 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      */
     private function buildCursor(array $item): string
     {
-        [$primaryKey] = $this->primaryKey;
-        [$backupKey] = $this->backupKey ?? [null];
+        [$primaryKey] = $this->primarySort;
+        [$backupKey] = $this->backupSort ?? [null];
         
         $segments = [$item[$primaryKey]];
         if ($backupKey) {
@@ -341,7 +471,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         
         $cursor = implode(self::CURSOR_GLUE, array_filter($segments));
         
-        return self::$encodeCursors ? base64_encode($cursor) : $cursor;
+        return $this->encodeCursors
+            ? $this->encodeCursor($cursor)
+            : $cursor;
     }
     
     /**
@@ -351,12 +483,8 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      */
     private function parseCursor(string $cursor): array
     {
-        if (self::$encodeCursors) {
-            try {
-                $cursor = base64_decode($cursor);
-            } catch (Throwable $t) {
-                throw new InvalidArgumentException('Failed to decode cursor');
-            }
+        if ($this->encodeCursors) {
+            $cursor = $this->decodeCursor($cursor);
         }
         
         [$primaryValue, $backupValue] = array_replace(
@@ -370,5 +498,33 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         }
         
         return array_replace([null, null], [$primaryValue, $backupValue]);
+    }
+    
+    /**
+     * Encodes cursor
+     *
+     * @param string $cursor
+     *
+     * @return string
+     */
+    private function encodeCursor(string $cursor): string
+    {
+        return str_rot13(base64_encode(str_rot13($cursor)));
+    }
+    
+    /**
+     * Decodes cursor
+     *
+     * @param string $cursor
+     *
+     * @return string
+     */
+    private function decodeCursor(string $cursor): string
+    {
+        try {
+            return str_rot13(base64_decode(str_rot13($cursor)));
+        } catch (Throwable $t) {
+            throw new InvalidArgumentException('Failed to decode cursor');
+        }
     }
 }
