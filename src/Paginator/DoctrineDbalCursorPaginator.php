@@ -249,14 +249,15 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      */
     public function paginate(): PaginationResultInterface
     {
-        $previousCursor = $currentCursor = $nextCursor = null;
+        $currentCursor = $this->before ?? $this->after;
+        $previousCursor = $nextCursor = null;
         $isBackwards = isset($this->before);
         $isDescending = $this->primarySort[1] === self::ORDER_DESC;
         $reverseResults = $this->reverseResults;
         
         $query = $this->extendQuery(
             $this->queryBuilder,
-            $this->before ?? $this->after,
+            $currentCursor,
             $this->maxResults,
             $isBackwards,
             $isDescending
