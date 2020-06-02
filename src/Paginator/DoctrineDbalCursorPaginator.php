@@ -361,21 +361,20 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
                 $comp = $comp === '<' ? '>' : '<';
             }
             
+            $query->andWhere("`$primaryKey` $comp :primaryValue");
+            
+            $orSql = "`$primaryKey` = :primaryValue";
+            if ($backupKey) {
+                $orSql .= " AND `$backupKey` $comp :backupValue";
+            }
+            $query->orWhere($orSql);
+            
             [$primaryValue, $backupValue] = $this->parseCursor($cursor);
             
-            $sql = "`$primaryKey` = :primaryValue";
-            if ($backupKey) {
-                $sql .= " AND `$backupKey` $comp :backupValue";
-            }
-            
+            // set each param individually to not overwrite existing ones
             $query
-                ->where($sql)
-                ->orWhere("`$primaryKey` $comp :primaryValue");
-            
-            $query->setParameters([
-                ':primaryValue' => $primaryValue,
-                ':backupValue' => $backupValue,
-            ]);
+                ->setParameter(':primaryValue', $primaryValue)
+                ->setParameter(':backupValue', $backupValue);
         }
         
         $query->orderBy($primaryKey, $primaryOrder);
@@ -421,14 +420,14 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         }
         
         $comp = $isBackwards ? '<' : '>';
-        $sql = "`$primaryKey` = :primaryValue";
-        if ($backupKey) {
-            $sql .= " AND `$backupKey` $comp :backupValue";
-        }
         
-        $query
-            ->where($sql)
-            ->orWhere("`$primaryKey` $comp :primaryValue");
+        $query->andWhere("`$primaryKey` $comp :primaryValue");
+        
+        $orSql = "`$primaryKey` = :primaryValue";
+        if ($backupKey) {
+            $orSql .= " AND `$backupKey` $comp :backupValue";
+        }
+        $query->orWhere($orSql);
         
         if ($isBackwards) {
             $query->orderBy($primaryKey, $primaryOrder);
@@ -437,10 +436,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
             }
         }
         
-        $query->setParameters([
-            ':primaryValue' => $primaryValue,
-            ':backupValue' => $backupValue,
-        ]);
+        $query
+            ->setParameter(':primaryValue', $primaryValue)
+            ->setParameter(':backupValue', $backupValue);
         
         return $query->setMaxResults(1)->execute()->rowCount() !== 0;
     }
