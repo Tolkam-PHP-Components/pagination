@@ -10,6 +10,8 @@ use Tolkam\Pagination\PaginatorInterface;
 
 class DoctrineDbalOffsetPaginator implements PaginatorInterface
 {
+    use SortingAwareTrait;
+    
     /**
      * @var QueryBuilder
      */
@@ -68,6 +70,14 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
         $query = $this->queryBuilder
             ->setFirstResult($offset)
             ->setMaxResults($limit);
+        
+        if ($primarySortKey = $this->getPrimarySortKey()) {
+            $query->addOrderBy($primarySortKey, $this->getPrimaryOrder());
+        }
+        
+        if ($backupSortKey = $this->getBackupSortKey()) {
+            $query->addOrderBy($backupSortKey, $this->getBackupOrder());
+        }
         
         $this->statement = $query->execute();
         $fetchedCount = $this->statement->rowCount();

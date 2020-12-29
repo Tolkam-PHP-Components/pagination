@@ -4,7 +4,6 @@ namespace Tolkam\Pagination\Paginator;
 
 use Doctrine\DBAL\Query\QueryBuilder;
 use InvalidArgumentException;
-use RuntimeException;
 use Throwable;
 use Tolkam\Pagination\PaginationResult;
 use Tolkam\Pagination\PaginationResultInterface;
@@ -12,8 +11,7 @@ use Tolkam\Pagination\PaginatorInterface;
 
 class DoctrineDbalCursorPaginator implements PaginatorInterface
 {
-    public const ORDER_ASC  = 'ASC';
-    public const ORDER_DESC = 'DESC';
+    use SortingAwareTrait;
     
     protected const CURSOR_GLUE = '|';
     
@@ -49,16 +47,6 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     protected bool $reverseResults = false;
     
     /**
-     * @var array|null
-     */
-    protected ?array $primarySort = null;
-    
-    /**
-     * @var array|null
-     */
-    protected ?array $backupSort = null;
-    
-    /**
      * @var callable|null
      */
     protected $keysProcessor = null;
@@ -79,86 +67,6 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     public function __construct(QueryBuilder $queryBuilder)
     {
         $this->queryBuilder = $queryBuilder;
-    }
-    
-    /**
-     * Sets the primary sort
-     *
-     * @param string $name
-     * @param string $order
-     *
-     * @return self
-     */
-    public function setPrimarySort(string $name, string $order = self::ORDER_ASC): self
-    {
-        if (empty($name)) {
-            throw new InvalidArgumentException('Primary sort column name can not be empty');
-        }
-        
-        $this->validateOrder($order);
-        $this->primarySort = [$name, $order];
-        
-        return $this;
-    }
-    
-    /**
-     * Gets primary sort key
-     *
-     * @return string
-     */
-    public function getPrimaryKey(): string
-    {
-        if (!$this->primarySort) {
-            throw new RuntimeException('Primary sort must be set first');
-        }
-        
-        return $this->primarySort[0];
-    }
-    
-    /**
-     * Gets primary sort order
-     *
-     * @return string
-     */
-    public function getPrimaryOrder(): string
-    {
-        return $this->primarySort[1];
-    }
-    
-    /**
-     * Sets the backup sort
-     *
-     * @param string $name
-     * @param string $order
-     *
-     * @return self
-     */
-    public function setBackupSort(string $name, string $order = self::ORDER_ASC): self
-    {
-        $this->validateOrder($order);
-        $this->backupSort = [$name, $order];
-        
-        return $this;
-    }
-    
-    /**
-     * Gets backup sort key
-     *
-     * @return string|null
-     */
-    public function getBackupKey(): ?string
-    {
-        return $this->backupSort[0] ?? null;
-    }
-    
-    /**
-     * Gets backup sort order
-     *
-     * @return string|null
-     */
-    public function getBackupOrder(): ?string
-    {
-        return $this->backupSort[1] ?? null;
     }
     
     /**
@@ -252,7 +160,7 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         $currentCursor = $this->before ?? $this->after;
         $previousCursor = $nextCursor = null;
         $isBackwards = isset($this->before);
-        $isDescending = $this->primarySort[1] === self::ORDER_DESC;
+        $isDescending = $this->primarySort[1] === DoctrineSortOrder::ORDER_DESC;
         $reverseResults = $this->reverseResults;
         
         $query = $this->extendQuery(
@@ -320,16 +228,6 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     }
     
     /**
-     * @param string $order
-     */
-    private function validateOrder(string $order)
-    {
-        if (!in_array($order, [self::ORDER_ASC, self::ORDER_DESC])) {
-            throw new RuntimeException('Unknown sort order');
-        }
-    }
-    
-    /**
      * @param QueryBuilder $query
      * @param string|null  $cursor
      * @param int          $maxResults
@@ -345,9 +243,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         bool $isBackwards,
         bool $isDesc = false
     ) {
-        $primaryKey = $this->getPrimaryKey();
+        $primaryKey = $this->getPrimarySortKey();
         $primaryOrder = $this->getPrimaryOrder();
-        $backupKey = $this->getBackupKey();
+        $backupKey = $this->getBackupSortKey();
         $backupOrder = $this->getBackupOrder();
         
         if ($isBackwards) {
@@ -401,9 +299,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     ): bool {
         
         $query = clone $query;
-        $primaryKey = $this->getPrimaryKey();
+        $primaryKey = $this->getPrimarySortKey();
         $primaryOrder = $this->getPrimaryOrder();
-        $backupKey = $this->getBackupKey();
+        $backupKey = $this->getBackupSortKey();
         $backupOrder = $this->getBackupOrder();
         
         if ($isBackwards) {
@@ -450,7 +348,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
      */
     private function inverseOrder(string $order): string
     {
-        return $order === self::ORDER_ASC ? self::ORDER_DESC : self::ORDER_ASC;
+        return $order === DoctrineSortOrder::ORDER_ASC
+            ? DoctrineSortOrder::ORDER_DESC
+            : DoctrineSortOrder::ORDER_ASC;
     }
     
     /**
