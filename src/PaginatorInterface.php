@@ -6,7 +6,7 @@ use Generator;
 
 interface PaginatorInterface
 {
-    const DEFAULT_PER_PAGE = 500;
+    public const DEFAULT_PER_PAGE = 500;
     
     /**
      * Paginates and returns the result
