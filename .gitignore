@@ -6,6 +6,7 @@
 !.htaccess
 !/.gitignore
 !/.travis.yml
+!/.gitlab-ci.yml
 
 # Environment configuration
 !.env.dist

@@ -1,8 +1,15 @@
 {
     "name": "tolkam/pagination",
-    "description": "Base classes for creating various pagination strategies",
+    "description": "Base classes and interfaces for creating various pagination strategies",
     "type": "library",
     "license": "proprietary",
+    "authors": [
+        {
+            "name": "Kanstantsin Kulesh",
+            "email": "kk@tolkam.com",
+            "homepage": "https://www.tolkam.com"
+        }
+    ],
     "autoload": {
         "psr-4": {
             "Tolkam\\Pagination\\": "src"
@@ -17,9 +24,7 @@
         "phpunit/phpunit": "^9.0",
         "phpunit/php-code-coverage": "^9.0"
     },
-    "extra": {
-        "branch-alias": {
-            "dev-master": "1.0-dev"
-        }
+    "scripts": {
+        "tests": "php vendor/bin/phpunit"
     }
 }
