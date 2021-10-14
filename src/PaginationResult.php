@@ -2,6 +2,7 @@
 
 namespace Tolkam\Pagination;
 
+// TODO: simplify api, replace prev/next cursor with one cursor + direction
 class PaginationResult implements PaginationResultInterface
 {
     /**

@@ -2,8 +2,8 @@
 
 namespace Tolkam\Pagination\Paginator;
 
-use Doctrine\DBAL\Driver\Statement;
 use Doctrine\DBAL\Query\QueryBuilder;
+use Generator;
 use Tolkam\Pagination\PaginationResult;
 use Tolkam\Pagination\PaginationResultInterface;
 use Tolkam\Pagination\PaginatorInterface;
@@ -20,22 +20,22 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
     /**
      * @var int
      */
-    protected int $currentPage;
+    protected int $offset = 1;
     
     /**
      * @var int
      */
-    protected int $perPage;
+    protected int $maxResults = self::DEFAULT_PER_PAGE;
+    
+    /**
+     * @var array
+     */
+    protected array $items = [];
     
     /**
      * @var int
      */
     protected int $itemsCount = 0;
-    
-    /**
-     * @var Statement|null
-     */
-    protected ?Statement $statement = null;
     
     /**
      * @var array
@@ -47,15 +47,47 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
      * @param              $currentPage
      * @param              $perPage
      */
-    public function __construct(QueryBuilder $queryBuilder, $currentPage, $perPage)
-    {
-        $currentPage = intval($currentPage);
-        $perPage = intval($perPage);
-        
+    public function __construct(
+        QueryBuilder $queryBuilder,
+        $currentPage = null,
+        $perPage = null
+    ) {
         $this->queryBuilder = $queryBuilder;
         
-        $this->currentPage = $currentPage >= 1 ? $currentPage : 1;
-        $this->perPage = $perPage >= 1 ? $perPage : self::DEFAULT_PER_PAGE;
+        $this->setOffset(intval($currentPage));
+        $this->setMaxResults(intval($perPage));
+    }
+    
+    /**
+     * Sets the offset (current page)
+     *
+     * @param int|null $offset
+     *
+     * @return self
+     */
+    public function setOffset(?int $offset): self
+    {
+        $this->offset = $offset !== null && $offset > 0
+            ? $offset
+            : $this->offset;
+        
+        return $this;
+    }
+    
+    /**
+     * Sets the max results
+     *
+     * @param int $maxResults
+     *
+     * @return self
+     */
+    public function setMaxResults(int $maxResults): self
+    {
+        $this->maxResults = $maxResults > 0
+            ? $maxResults
+            : $this->maxResults;
+        
+        return $this;
     }
     
     /**
@@ -64,8 +96,8 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
     public function paginate(): PaginationResultInterface
     {
         $extraItemsToFetch = 1;
-        $offset = ($this->currentPage - 1) * $this->perPage;
-        $limit = $this->perPage + $extraItemsToFetch;
+        $offset = ($this->offset - 1) * $this->maxResults;
+        $limit = $this->maxResults + $extraItemsToFetch;
         
         $query = $this->queryBuilder
             ->setFirstResult($offset)
@@ -79,34 +111,38 @@ class DoctrineDbalOffsetPaginator implements PaginatorInterface
             $query->addOrderBy($backupSortKey, $this->getBackupOrder());
         }
         
-        $this->statement = $query->execute();
-        $fetchedCount = $this->statement->rowCount();
+        $statement = $query->execute();
+        if (!empty($this->fetchMode)) {
+            $statement->setFetchMode(...$this->fetchMode);
+        }
+        $this->items = $statement->fetchAll();
+        $fetchedCount = count($this->items);
         
+        // set items count to match per page count
+        // if it has more than per page
         $this->itemsCount = $fetchedCount;
-        // set items count to match per page count if has more than per page
-        if ($this->itemsCount > $this->perPage) {
+        if ($this->itemsCount > $this->maxResults) {
             $this->itemsCount = $fetchedCount - $extraItemsToFetch;
         }
         
-        $previousPage = $this->currentPage >= 2 ? $this->currentPage - 1 : null;
-        $nextPage = $fetchedCount > $this->perPage ? $this->currentPage + 1 : null;
+        $previousPage = $this->offset >= 2 ? $this->offset - 1 : null;
+        $nextPage = $fetchedCount > $this->maxResults ? $this->offset + 1 : null;
         
-        return new PaginationResult($this->itemsCount, $previousPage, $this->currentPage, $nextPage);
+        return new PaginationResult(
+            $this->itemsCount,
+            $previousPage,
+            $this->offset,
+            $nextPage
+        );
     }
     
     /**
      * @inheritDoc
      */
-    public function getItems()
+    public function getItems(): Generator
     {
-        if (!empty($this->fetchMode)) {
-            $this->statement->setFetchMode(...$this->fetchMode);
-        }
-        
         for ($i = 0; $i < $this->itemsCount; $i++) {
-            if ($item = $this->statement->fetch()) {
-                yield $item;
-            }
+            yield array_shift($this->items);
         }
     }
     

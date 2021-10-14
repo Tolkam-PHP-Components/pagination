@@ -4,6 +4,7 @@ namespace Tolkam\Pagination\Paginator;
 
 use Doctrine\DBAL\Driver\Statement;
 use Doctrine\DBAL\Query\QueryBuilder;
+use Generator;
 use Tolkam\Pagination\PaginationResult;
 use Tolkam\Pagination\PaginationResultInterface;
 use Tolkam\Pagination\PaginatorInterface;
@@ -46,7 +47,7 @@ class DoctrineDbalNullPaginator implements PaginatorInterface
     /**
      * @inheritDoc
      */
-    public function getItems()
+    public function getItems(): Generator
     {
         if (!empty($this->fetchMode)) {
             $this->statement->setFetchMode(...$this->fetchMode);

@@ -46,9 +46,7 @@ trait SortingAwareTrait
      */
     public function getPrimarySortKey(): string
     {
-        if (!$this->primarySort) {
-            throw new RuntimeException('Primary sort must be set first');
-        }
+        $this->ensurePrimarySortSet();
         
         return $this->primarySort[0];
     }
@@ -60,6 +58,8 @@ trait SortingAwareTrait
      */
     public function getPrimaryOrder(): string
     {
+        $this->ensurePrimarySortSet();
+        
         return $this->primarySort[1];
     }
     
@@ -108,6 +108,16 @@ trait SortingAwareTrait
     {
         if (!in_array($order, [DoctrineSortOrder::ORDER_ASC, DoctrineSortOrder::ORDER_DESC])) {
             throw new RuntimeException('Unknown sort order');
+        }
+    }
+    
+    /**
+     * Checks if primary sort is set
+     */
+    private function ensurePrimarySortSet()
+    {
+        if (!$this->primarySort) {
+            throw new RuntimeException('Primary sort must be set first');
         }
     }
 }

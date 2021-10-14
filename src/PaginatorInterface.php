@@ -20,5 +20,5 @@ interface PaginatorInterface
      *
      * @return Generator|[]
      */
-    public function getItems();
+    public function getItems(): Generator;
 }

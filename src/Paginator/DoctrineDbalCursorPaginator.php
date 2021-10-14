@@ -3,7 +3,9 @@
 namespace Tolkam\Pagination\Paginator;
 
 use Doctrine\DBAL\Query\QueryBuilder;
+use Generator;
 use InvalidArgumentException;
+use RuntimeException;
 use Throwable;
 use Tolkam\Pagination\PaginationResult;
 use Tolkam\Pagination\PaginationResultInterface;
@@ -97,7 +99,10 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     }
     
     /**
-     * Sets the keysProcessor
+     * Sets the keys processor
+     *
+     * Processor is useful when values of the sort fields
+     * needs to be modified before executing the query
      *
      * @param callable|null $keysProcessor
      *
@@ -139,7 +144,7 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     }
     
     /**
-     * Sets the perPage
+     * Sets the max results
      *
      * @param int $maxResults
      *
@@ -160,43 +165,48 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         $currentCursor = $this->before ?? $this->after;
         $previousCursor = $nextCursor = null;
         $isBackwards = isset($this->before);
-        $isDescending = $this->primarySort[1] === DoctrineSortOrder::ORDER_DESC;
+        $isDescending = $this->getPrimaryOrder() === DoctrineSortOrder::ORDER_DESC;
         $reverseResults = $this->reverseResults;
         
-        $query = $this->extendQuery(
-            $this->queryBuilder,
+        // clone to not extend
+        // the main query multiple times
+        $cursorsQuery = clone $this->queryBuilder;
+        $resultsQuery = clone $this->queryBuilder;
+        
+        // extend the main query with cursors and limits
+        $this->extendQuery(
+            $resultsQuery,
             $currentCursor,
             $this->maxResults,
             $isBackwards,
             $isDescending
         );
         
-        $statement = $query->execute();
+        $statement = $resultsQuery->execute();
         if (!empty($this->fetchMode)) {
             $statement->setFetchMode(...$this->fetchMode);
         }
         
-        $count = $statement->rowCount();
         $this->items = $statement->fetchAll();
+        $count = count($this->items);
         if ($isBackwards && !$reverseResults || !$isBackwards && $reverseResults) {
             $this->items = array_reverse($this->items);
         }
         
-        // new cursors
-        if (count($this->items)) {
-            $query = $this->queryBuilder;
-            $firstInSet = $this->items[0];
-            $lastInSet = $this->items[$count - 1];
+        // create result cursors
+        if ($count) {
+            $firstInSet = (array) $this->items[0];
+            $lastInSet = (array) $this->items[$count - 1];
             
             // prev
             $currentItem = $reverseResults ? $lastInSet : $firstInSet;
-            if ($this->hasPage($query, $currentItem, !$isDescending)) {
+            if ($this->hasPage(clone $cursorsQuery, $currentItem, !$isDescending)) {
                 $previousCursor = $this->buildCursor($currentItem);
             }
             
             // next
             $currentItem = $reverseResults ? $firstInSet : $lastInSet;
-            if ($this->hasPage($query, $currentItem, $isDescending)) {
+            if ($this->hasPage(clone $cursorsQuery, $currentItem, $isDescending)) {
                 $nextCursor = $this->buildCursor($currentItem);
             }
         }
@@ -212,7 +222,7 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     /**
      * @inheritDoc
      */
-    public function getItems()
+    public function getItems(): Generator
     {
         yield from $this->items;
     }
@@ -242,18 +252,25 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         int $maxResults,
         bool $isBackwards,
         bool $isDesc = false
-    ) {
+    ): QueryBuilder {
+        
         $primaryKey = $this->getPrimarySortKey();
         $primaryOrder = $this->getPrimaryOrder();
         $backupKey = $this->getBackupSortKey();
         $backupOrder = $this->getBackupOrder();
+        
+        if (!$backupKey) {
+            throw new RuntimeException(
+                'Backup sort is required for cursor pagination'
+            );
+        }
         
         if ($isBackwards) {
             $primaryOrder = $this->inverseOrder($primaryOrder);
             $backupOrder = $this->inverseOrder($backupOrder);
         }
         
-        if ($cursor) {
+        if ($cursor !== null) {
             $comp = $isBackwards ? '<' : '>';
             if ($isDesc) {
                 $comp = $comp === '<' ? '>' : '<';
@@ -297,8 +314,6 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         array $currentItem,
         bool $isBackwards
     ): bool {
-        
-        $query = clone $query;
         $primaryKey = $this->getPrimarySortKey();
         $primaryOrder = $this->getPrimaryOrder();
         $backupKey = $this->getBackupSortKey();
@@ -310,7 +325,7 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         }
         
         $primaryValue = $currentItem[$primaryKey];
-        $backupValue = $currentItem[$backupKey] ?? null;
+        $backupValue = $currentItem[$backupKey];
         
         if ($this->keysProcessor) {
             $processor = $this->keysProcessor;
@@ -337,8 +352,9 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
         $query
             ->setParameter(':primaryValue', $primaryValue)
             ->setParameter(':backupValue', $backupValue);
+        $query->setMaxResults(1);
         
-        return $query->setMaxResults(1)->execute()->rowCount() !== 0;
+        return !!$query->execute()->fetchNumeric();
     }
     
     /**
@@ -386,6 +402,10 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
             $cursor = $this->decodeCursor($cursor);
         }
         
+        if (!str_contains($cursor, self::CURSOR_GLUE)) {
+            throw new InvalidArgumentException('Failed to parse cursor');
+        }
+        
         [$primaryValue, $backupValue] = array_replace(
             [null, null],
             explode(self::CURSOR_GLUE, $cursor)
@@ -421,7 +441,7 @@ class DoctrineDbalCursorPaginator implements PaginatorInterface
     private function decodeCursor(string $cursor): string
     {
         try {
-            return str_rot13(base64_decode(str_rot13($cursor)));
+            return str_rot13(base64_decode(str_rot13($cursor), true));
         } catch (Throwable $t) {
             throw new InvalidArgumentException('Failed to decode cursor');
         }
