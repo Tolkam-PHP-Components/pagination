@@ -1,0 +1,17 @@
+<phpunit bootstrap="vendor/autoload.php">
+    <testsuites>
+        <testsuite name="default">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <!-- phpunit v9.x <coverage> alternative -->
+    <filter>
+        <whitelist>
+            <directory>src/Paginator</directory>
+            <exclude>
+                <file>src/Paginator/DoctrineDbalNullPaginator.php</file>
+            </exclude>
+        </whitelist>
+    </filter>
+</phpunit>

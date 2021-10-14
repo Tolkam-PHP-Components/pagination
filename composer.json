@@ -1,6 +1,6 @@
 {
     "name": "tolkam/pagination",
-    "description": "Extendable pagination",
+    "description": "Base classes for creating various pagination strategies",
     "type": "library",
     "license": "proprietary",
     "autoload": {
@@ -12,7 +12,10 @@
         "php": ">=7.4"
     },
     "require-dev": {
-        "doctrine/dbal": "^2.9"
+        "tolkam/dump": "^2.0",
+        "doctrine/dbal": "^2.9",
+        "phpunit/phpunit": "^9.0",
+        "phpunit/php-code-coverage": "^9.0"
     },
     "extra": {
         "branch-alias": {
