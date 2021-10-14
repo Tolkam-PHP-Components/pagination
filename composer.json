@@ -21,8 +21,8 @@
     "require-dev": {
         "tolkam/dump": "^2.0",
         "doctrine/dbal": "^2.9",
-        "phpunit/phpunit": "^9.0",
-        "phpunit/php-code-coverage": "^9.0"
+        "phpunit/phpunit": "^8.5",
+        "phpunit/php-code-coverage": "^7.0"
     },
     "scripts": {
         "tests": "php vendor/bin/phpunit"
