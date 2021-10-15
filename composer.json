@@ -12,7 +12,8 @@
     ],
     "autoload": {
         "psr-4": {
-            "Tolkam\\Pagination\\": "src"
+            "Tolkam\\Pagination\\": "src",
+            "Tolkam\\Pagination\\Tests\\": "tests"
         }
     },
     "require": {

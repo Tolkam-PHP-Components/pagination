@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+namespace Tolkam\Pagination\Tests;
+
 use Tolkam\Pagination\Paginator\DoctrineDbalOffsetPaginator;
 
 class DoctrineDbalOffsetPaginatorTest extends AbstractDoctrineDbalTest
@@ -13,18 +15,6 @@ class DoctrineDbalOffsetPaginatorTest extends AbstractDoctrineDbalTest
             $this->queryFactory()
         );
     }
-    
-    /**
-     * @depends testDbQuery
-     */
-    // public function testInstance(QueryBuilder $query): DoctrineDbalOffsetPaginator
-    // {
-    //     $paginator = new DoctrineDbalOffsetPaginator($query);
-    //
-    //     $this->assertInstanceOf(DoctrineDbalOffsetPaginator::class, $paginator);
-    //
-    //     return $paginator;
-    // }
     
     public function testConfigPrimarySort()
     {

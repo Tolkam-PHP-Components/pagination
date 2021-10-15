@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+namespace Tolkam\Pagination\Tests;
+
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder;
 use PHPUnit\Framework\TestCase;

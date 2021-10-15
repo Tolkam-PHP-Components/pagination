@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+namespace Tolkam\Pagination\Tests;
+
 use Tolkam\Pagination\Paginator\DoctrineDbalCursorPaginator;
 use Tolkam\Pagination\Paginator\DoctrineSortOrder;
 
