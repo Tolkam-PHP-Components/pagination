@@ -40,7 +40,7 @@ interface PaginationResultInterface
     public function isFirst(): bool;
     
     /**
-     * Checks if has previous or next pages
+     * Checks if it has previous or next pages
      *
      * @return bool
      */
