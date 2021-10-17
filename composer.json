@@ -17,5 +17,8 @@
     },
     "require": {
         "php": ">=7.4"
+    },
+    "suggest": {
+        "tolkam/pagination-doctrine": "Doctrine DBAL paginators for tolkam/pagination"
     }
 }
