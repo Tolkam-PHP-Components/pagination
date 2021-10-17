@@ -1,25 +1,5 @@
 stages:
-    - test
     - publish
-
-test:7.4:
-    stage: test
-    before_script:
-        - php7.4 -v
-        - php7.4 /usr/local/bin/composer install --no-interaction
-
-    script:
-        - php7.4 ./vendor/bin/phpunit -v --coverage-text --colors=never --stderr
-
-test:8.0:
-    stage: test
-    before_script:
-        - php8.0 -v
-        - php8.0 /usr/local/bin/composer install --no-interaction
-
-    script:
-        - php8.0 ./vendor/bin/phpunit -v --coverage-text --colors=never --stderr
-
 
 publish_composer:
     image: curlimages/curl:latest
